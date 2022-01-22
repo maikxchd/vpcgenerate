@@ -1,0 +1,62 @@
+{% if vpc_vendor == 'brocade' %}
+vlan {{vlan}} name {{region_id}}-{{name}}
+ {% if vpc_primary -%}tagged ethe 8/7{% else -%}
+ tagged ethe 7/7{%- endif %}
+ router-interface ve {{vlan}}
+!
+interface ve {{vlan}}
+{% if vpc_primary -%}
+ port-name SVI::{{region_id}}:{{name}}:::::
+{% else -%}
+ port-name SVI::{{region_id}}:{{name}}:2::::
+{%- endif %}
+ ip address {{twitch_ip}} {{netmask}}
+ no ip redirect
+ ip arp-age 30
+!
+router bgp
+ neighbor {{amzn_ip}} remote-as 7224
+ {% if vpc_primary -%}
+ neighbor {{amzn_ip}} peer-group AWS1
+ neighbor {{amzn_ip}} description COLO-AWS:{{region_id}}-{{name}}:1:7224::{{bgp_community|replace(":","-")}}
+ {% else -%}
+ neighbor {{amzn_ip}} peer-group AWS2
+ neighbor {{amzn_ip}} description COLO-AWS:{{region_id}}-{{name}}:2:7224::{{bgp_community|replace(":","-")}}
+ {%- endif %}
+ neighbor {{amzn_ip}} password {{bgp_auth}}
+ neighbor {{amzn_ip}} soft-reconfiguration inbound
+ neighbor {{amzn_ip}} route-map in aws-{{name}}-in
+ neighbor {{amzn_ip}} filter-list 99 in
+ neighbor {{amzn_ip}} filter-list 99 out
+ no neighbor {{amzn_ip}} shutdown
+
+
+{% elif vpc_vendor == 'cisco' %}
+interface Bundle-Ether190.{{vlan}}
+  description SVI::{{region_id}}:{{name}}:1::::
+  ipv4 address {{twitch_ip}} {{netmask}}
+  load-interval 30
+  flow ipv4 monitor twitchflowmap sampler mysamplermap egress
+  flow mpls monitor twitchmonitormplsmap sampler mysamplermap egress
+  encapsulation dot1q {{vlan}}
+  !
+router bgp 46489
+  neighbor-group {{region_id}}-{{name}}-policy
+    address-family ipv4 unicast
+    route-policy aws-all-out out
+    route-policy {{region_id}}-{{name}}-in in
+    soft-reconfiguration inbound always
+
+neighbor {{amzn_ip}}
+    remote-as 7224
+    use neighbor-group {{region_id}}-{{name}}-policy
+    bfd fast-detect
+    bfd multiplier 3
+    bfd minimum-interval 300
+    password clear {{bgp_auth}}
+    description COLO-AWS:{{region_id}}-{{name}}:1:7224::{{bgp_community|replace(":","-")}}
+    address-family ipv4 unicast
+      route-policy 99 in
+      route-policy 99 out
+
+{% endif %}

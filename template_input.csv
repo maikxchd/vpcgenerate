@@ -1,0 +1,2 @@
+﻿name,account,connection,vlan,ipblock,bgp_auth,bgp_community,region_id
+aws-test,1000,dxcon-frznszn1,1154,168.234.202.61/24,PASSWORD,65111:11111,ap-southeast-3

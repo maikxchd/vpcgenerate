@@ -1,0 +1,38 @@
+{% if vpc_vendor == 'brocade' %}
+route-map aws-{{name}}-in deny 20
+ match ip address prefix-list bogon-and-default-aws
+route-map aws-{{name}}-in deny 40
+ match as-path  transit-providers
+route-map aws-{{name}}-in deny 60
+ match ip address prefix-list deny-ix
+route-map aws-{{name}}-in permit 2000
+ match ip address prefix-list aws-in
+ set origin incomplete
+ set metric 100
+ set local-preference 2000
+ set comm-list INTERNAL delete
+ set community {{bgp_community}} additive
+!
+!
+{% elif vpc_vendor == 'cisco' %}
+route-policy {{region_id}}-{{name}}-in
+  apply maint-pass-or-drop-aws-dx
+  set origin incomplete
+  set med 100
+  set local-preference 2000
+  delete community in INTERNAL
+  set community ({{bgp_community}}) additive
+  if destination in bogon-and-default-aws then
+    drop
+  elseif as-path in transit-providers then
+    drop
+  elseif destination in deny-ix then
+    drop
+  elseif destination in aws-in then
+    done
+  else
+    drop
+  endif
+end-policy
+!
+{% endif %}
